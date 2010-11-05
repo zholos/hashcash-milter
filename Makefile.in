@@ -1,0 +1,23 @@
+CC=@CC@
+CFLAGS=@CFLAGS@ @CONFIG@
+LDFLAGS=@LDFLAGS@
+LIBS=@LIBS@
+PREFIX=@PREFIX@
+
+OBJS=milter.o util.o rfc2822.o sha1.o
+HEADERS=util.h rfc2822.h sha1.h
+PROG=hashcash-milter
+
+$(PROG): $(OBJS)
+	$(CC) -o $@ $(OBJS) $(LDFLAGS) $(LIBS)
+
+test: $(OBJS) test.o
+	$(CC) -o $@ $(OBJS) test.o $(LDFLAGS) $(LIBS)
+
+$(OBJS): $(HEADERS)
+
+install: $(PROG)
+	install -m 755 -p -s $(PROG) $(PREFIX)/sbin/$(PROG)
+
+clean:
+	rm -f $(PROG) test $(OBJS) test.o

@@ -1,0 +1,252 @@
+Hashcash Milter
+
+1. Introduction
+
+This is a milter (mail filter) that can mint and verify Hashcash stamps for
+email messages passing through compatible MTAs. A Hashcash stamp proves that a
+certain difficult computation has been performed. Since putting such a stamp on
+every spam message would increase the cost of sending them dramatically, they
+may be used to indicate that a message is less likely to be spam. The stamps are
+described in more detail at <http://hashcash.org>.
+
+
+2. Version information
+
+This is version 0.1.2 of Hashcash Milter.
+
+
+3. License
+
+Hashcash Milter is free software, available under a BSD-style license. There is
+NO WARRANTY; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the file LICENSE for more information.
+
+
+4. Building and installing
+
+To build the milter, run
+
+    ./configure
+    make
+
+The Sendmail Mail Filter API library (libmilter) is required.
+
+Optimization is important for speed of minting. GCC 4.2 seems to produce faster
+code here than later versions. Speed can be checked by running the test program
+
+    make test
+    ./test -p '' -f -a -i 192.0.2.0/24 -c 20 -m 24
+
+To install the software, either copy the program 'hashcash-milter' to an
+appropriate directory, or run
+
+    make install
+
+Next, configure the program to run at startup with appropriate command-line
+options. A Debian Linux init script is included with this distribution.
+
+Finally, configure the MTA to use the milter and other programs to use its
+output. Some details on this are provided below.
+
+
+5. Minting mode
+
+The milter has two basic modes of operation. The first is minting mode, in which
+the milter adds Hashcash stamps to outgoing messages. Hashcash stamps are placed
+into "X-Hashcash" email headers which generally look like this:
+
+    X-Hashcash: 1:25:100124:fox@forest.example::10ULm0awZLlz9Vbr:=CkW
+
+The embedded email is the recipient, a distinct stamp must be attached for each
+one. The milter gets the list of recipients from "To" and "CC" headers. "BCC"
+headers and envelope recipients are ignored, because a stamp would reveal their
+existence.
+
+There are two ways to specify which messages are considered outgoing:
+
+  1. With the '-a' command-line flag, messages received after SMTP
+     authentication are considered outgoing.
+
+  2. With the '-i' command-line option, messages received from listed network
+     addresses are considered outgoing. E.g.:
+
+        -i 127.0.0.1,192.0.2.1/24,2001:db8::1/32
+
+     Messages received over a local-domain socket are treated as if received
+     from 127.0.0.1.
+
+Additionally, minting may be limited to particular sender domains with the '-s'
+command-line option. E.g.:
+
+    -s forest.example,valley.example
+
+The value of minted stamps is specified in bits of partial preimage with the
+'-m' option. Without this option minting mode will be disabled. For each
+additional bit the minting time increases roughly twofold. The '-r' option may
+also be specified to reduce the number of bits for messages with multiple
+recipients. In that case, the number of bits is reduced by one for each
+doubling of the number of recipients until the given minimum is reached. E.g.:
+
+    -m 24 -r 20
+
+Minting time may be limited with the '-t' command-line option. Even if this
+option is not given, milter timeouts in the MTA may eventually cause it to
+accept or reject the message before minting is complete, so specifying the limit
+explicitly is recommended. E.g.:
+
+    -t 120  # two minutes
+
+The SMTP client talking to the MTA will not receive any progress reports until
+minting is complete and the message is accepted. RFC 5321 recommends a minimum
+of 10 minutes for the SMTP timeout; the '-t' option should not exceed this.
+
+If the message already contains any Hashcash stamps, the milter will not mint
+new ones. To prevent minting stamps for specific messages the following header
+can be used; a single instance of this header will be removed by the milter:
+
+    X-Hashcash: skip
+
+
+6. Verification mode
+
+The second mode of operation is verification mode, in which the milter checks
+Hashcash stamps on incoming messages. It will add a header indicating the
+outcome of this check which will generally look like this:
+
+    Authentication-Results: forest.example; x-hashcash=pass (25 bits)
+
+The minimum value of stamps to accept is specified in bits of partial preimage
+with the '-c' option. Without this option verification mode will be disabled.
+E.g.:
+
+    -c 20
+
+In order to get an "pass" result, each of the envelope recipients that is also
+listed in the "To" or "CC" headers must have a corresponding valid Hashcash
+stamp with at least the value specified in the '-c' option. Recipients at other
+domains will not be listed on the SMTP envelope, so any stamps for them will be
+ignored. Any stamps for "BCC" recipients will also be ignored, as they will be
+specified on the SMTP envelope, but not in the message headers.
+
+Valid stamps which don't have sufficient value, have a date in the future or
+more than 28 days in the past (allowing for some clock skew) will give a
+"policy" result such as:
+
+    Authentication-Results: forest.example; x-hashcash=policy (only 12 bits)
+    Authentication-Results: forest.example; x-hashcash=policy (futuristic)
+    Authentication-Results: forest.example; x-hashcash=policy (expired)
+
+Stamps which don't have the bits of partial preimage that they claim are invalid
+and will give a "fail" result:
+
+    Authentication-Results: forest.example; x-hashcash=fail (invalid)
+
+Valid stamps which have been used to verify a message are spent, and can be
+stored in a file specified by the '-d' option to prevent their reuse. E.g.:
+
+    -d /var/spool/postfix/hashcash-milter/spent.db
+
+Spent stamps which are reused on another message are considered invalid and will
+give a "fail" verification result:
+
+    Authentication-Results: forest.example; x-hashcash=fail (already spent)
+
+If multiple stamps are affixed for a single recipient, the best stamp is chosen.
+
+When a message has multiple recipients and their relevant stamps give different
+results individually, the combined result depends on all individual results.
+Any invalid stamps give a combined "fail" result. If all recipients have valid
+stamps of sufficient value, the "pass" result comment will show the number of
+bits on the lowest-value stamp.
+
+If only some recipients have stamps of sufficient value, while stamps for other
+recipients are either missing or would give a "policy" result individually, the
+result will be "partial", showing the value of the best stamp:
+
+    Authentication-Results: forest.example; x-hashcash=partial (highest 20 bits)
+
+Finally, if the message has "X-Hashcash" headers, but none of them contain
+stamps, the result will be "neutral".
+
+
+7. Using with Postfix
+
+Postfix has support for Sendmail milters. In a simple configuration with no
+other milters, the following options in 'postfix/main.cf' should be sufficient:
+
+    smtpd_milters         = unix:/hashcash-milter/hashcash-milter.sock
+    non_smtpd_milters     = unix:/hashcash-milter/hashcash-milter.sock
+    milter_default_action = accept
+
+The last line specifies that in case the milter fails messages will be accepted.
+Since this milter is not critical, this is the preferred option. Otherwise, if
+the milter failed, mail would be temporarily rejected until it was restarted.
+The milter also adopts this approach internally, accepting a message without
+modification in case of any errors.
+
+The socket paths are relative to the Postfix chroot directory. The milter itself
+will have a socket path specified relative to the root,
+
+    -p local:/var/spool/postfix/hashcash-milter/hashcash-milter.sock
+
+or relative to its own chroot directory,
+
+    -p local:/hashcash-milter.sock
+
+Note that there are some differences in the syntax for sockets between the
+milter and Postfix. See the Postfix documentation on milters at
+<http://www.postfix.org/MILTER_README.html> for details.
+
+
+8. Using with SpamAssassin
+
+SpamAssassin has its own plugin for verifying Hashcash stamps, but since it
+doesn't have access to the envelope recipients, and the message recipient
+headers ("To" and "CC") are easy to forge, it must be manually configured to
+accept stamps for specific addresses. On the other hand, it can be configured
+to accept stamps for arbitrary addresses, including, for example, mailing list
+addresses.
+
+This milter does have access to the envelope recipients, which are validated by
+the MTA, and can thus reliably determine which stamps are required. This means
+that it can work for directly addressed mail without specific configuration.
+However, since it works at the host level (rather than the user level) it must
+verify all stamps for all recipients on the host together, and it can't be
+configured to accept stamps for arbitrary addresses.
+
+SpamAssassin can be configured to use the results of verification by this milter
+to score messages similarly its own plugin by relying on the
+"Authentication-Results" header. For example, the following ruleset accomplishes
+this (after replacing "example.com" with the MTA hostname):
+
+    use_hashcash 0  # disable own plugin
+
+    # each directive must be on a single line
+    header HASHCASH_20     Authentication-Results =~ /^example\.com; x-hashcash=pass \(20 bits\)/
+    header HASHCASH_21     Authentication-Results =~ /^example\.com; x-hashcash=pass \(21 bits\)/
+    header HASHCASH_22     Authentication-Results =~ /^example\.com; x-hashcash=pass \(22 bits\)/
+    header HASHCASH_23     Authentication-Results =~ /^example\.com; x-hashcash=pass \(23 bits\)/
+    header HASHCASH_24     Authentication-Results =~ /^example\.com; x-hashcash=pass \(24 bits\)/
+    header HASHCASH_25     Authentication-Results =~ /^example\.com; x-hashcash=pass \(25 bits\)/
+    header HASHCASH_HIGH   Authentication-Results =~ /^example\.com; x-hashcash=pass \((2[6-9]|[3-9]\d|\d{3}) bits\)/
+    header HASHCASH_2SPEND Authentication-Results =~ /^example\.com; x-hashcash=fail \(already spent\)/
+
+If it finds Hashcash stamps, the milter inserts the "Authentication-Results"
+header with a single method ("x-hashcash"), and it will always remove any other
+headers which specify the same method on this host. However it is possible to
+forge similar-looking headers which will not be removed. For example, in the
+following syntactically-valid header the parenthesized part is a comment, so it
+will be ignored and the header will be left in place:
+
+    Authentication-Results: example.com(; x-hashcash=pass (160 bits)); none
+
+Thus, the regular expressions matching the header should be fairly strict, like
+the ones in the example. Note that the method identifier and result code are
+case-sensitive, while the domain name is case-insensitive and will be listed as
+reported by the MTA.
+
+
+9. Updates and feedback
+
+This program is hosted at <http://althenia.net/hashcash>.
+The author is Andrey Zholos <aaz@althenia.net>.

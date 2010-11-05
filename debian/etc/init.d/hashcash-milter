@@ -1,0 +1,88 @@
+#!/bin/sh
+
+## BEGIN INIT INFO
+# Provides:          hashcash-milter
+# Required-Start:    $local_fs $syslog
+# Required-Stop:     $local_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Starts and stops hashcash-milter
+# Description:       Hashcash milter is a mail filter that adds
+#                    Hashcash stamps to outgoing mail
+## END INIT INFO
+
+NAME=hashcash-milter
+DESC="Hashcash milter"
+DAEMON=/usr/local/sbin/"$NAME"
+DEFAULT=/etc/default/hashcash-milter
+PIDFILE=/var/run/"$NAME/$NAME".pid
+SOCKET=/var/run/"$NAME/$NAME".sock
+SOCKETMODE=
+SOCKETOWNER=
+USER=
+OPTIONS=
+
+[ -r "$DEFAULT" ] && source "$DEFAULT"
+
+. /lib/lsb/init-functions
+
+check() {
+    [ -x "$DAEMON" ] || { log_action_msg "$DESC is not installed"; exit 5; }
+    [ -r "$DEFAULT" ] || { log_action_msg "$DESC is not configured"; exit 6; }
+}
+
+start() {
+    check || exit $?
+    log_daemon_msg "Starting $DESC" "$NAME"
+    [ -n "$USER" ] && OPTIONS="-u $USER $OPTIONS"
+    if start-stop-daemon -S -q -p "$PIDFILE" -x "$DAEMON" -- \
+        -p "$SOCKET" -P "$PIDFILE" $OPTIONS
+    then
+        SOCKETLOCAL="${SOCKET#unix:}"; SOCKETLOCAL="${SOCKETLOCAL#local:}"
+        if [ -n "$SOCKETLOCAL" -a "$SOCKETLOCAL" != "$SOCKET" ]; then
+            [ -n "$SOCKETOWNER" ] && chown "$SOCKETOWNER" "$SOCKETLOCAL"
+            [ -n "$SOCKETMODE" ] && chmod "$SOCKETMODE" "$SOCKETLOCAL"
+        fi
+        log_end_msg 0
+    else
+        log_end_msg 1
+    fi
+}
+
+stop() {
+    log_daemon_msg "Stopping $DESC" "$NAME"
+    start-stop-daemon -K -q -p "$PIDFILE" -x "$DAEMON" -R 30 || ! :
+    log_end_msg $?
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        check
+        start
+        ;;
+    try-restart|force-reload)
+        check
+        pidofproc -p "$PIDFILE" "$DAEMON" >/dev/null && { stop; start; } || \
+            exit 1
+        ;;
+    reload)
+        log_action_msg "reload not implemented"
+        exit 3
+        ;;
+    status)
+        status_of_proc -p "$PIDFILE" "$DAEMON" "$NAME"
+        exit $?
+        ;;
+    *)
+        log_action_msg \
+            "Usage: $0 {start|stop|[try-]restart|[force-]reload|status}"
+        exit 1
+        ;;
+esac
