@@ -1,0 +1,229 @@
+#!/bin/sh
+set -e
+
+CC=cc
+CFLAGS="-Wall -Wextra -Wno-parentheses -Wno-unused -O3 -pipe"
+LDFLAGS=
+LIBS=
+PREFIX=
+CONFIG=
+
+for arg in "$@"; do
+    case "$arg" in
+              CC=*)      CC="${arg#*=}" ;;
+          CFLAGS=*)  CFLAGS="${arg#*=}" ;;
+         LDFLAGS=*) LDFLAGS="${arg#*=}" ;;
+        --prefix=*)  PREFIX="${arg#*=}" ;;
+         -h|--help) cat <<'USAGE'
+Configuration options:
+
+  --prefix=dir     installation prefix
+    CC=bin         C compiler
+    CFLAGS=flags   C++ compiler flags
+    LDFLAGS=flags  linker flags
+
+USAGE
+                    exit 0 ;;
+                 *) echo "unknown configure option $1" >&2; exit 1
+    esac
+done
+
+if [ -n "$PREFIX" ]; then
+    CFLAGS="$CFLAGS -I$PREFIX/include"
+else
+    PREFIX=/usr/local
+fi
+
+conftest () {
+    cat >conftest.c
+    args="$CFLAGS $CONFIG"
+    if [ "$1" != '-c' ]; then
+        args="$args $LDFLAGS $LIBS"
+    fi
+    "$CC" $args "$@" -Wimplicit -Werror -o conftest.out conftest.c \
+        >/dev/null 2>&1
+    status=$?
+    rm -f conftest.c conftest.out
+    return $status
+}
+
+
+compiletest() {
+    conftest "$@" <<'HERE'
+int main() {
+    return 0;
+}
+HERE
+    return $?
+}
+
+echo -n 'checking whether we can compile... '
+if compiletest -c; then
+    echo yes
+else
+    echo no
+    echo 'a working compiler is required' >&2; exit 1
+fi
+
+echo -n 'checking whether we can link... '
+if compiletest; then
+    echo yes
+else
+    echo no
+    echo 'a working compiler is required' >&2; exit 1
+fi
+
+dbtest () {
+    conftest "$@" <<'HERE'
+#ifdef USE_DB185
+#include <db_185.h>
+#else
+#include <db.h>
+#endif
+BTREEINFO dbinfo;
+DBT dbt;
+int main() {
+    DB* db = dbopen("", 0, 0, DB_BTREE, &dbinfo);
+    db->seq(db, &dbt, &dbt, R_FIRST);
+    db->del(db, &dbt, R_CURSOR);
+    db->put(db, &dbt, &dbt, R_NOOVERWRITE);
+    return 0;
+}
+HERE
+    return $?
+}
+
+echo -n 'checking for dbopen() header... '
+if dbtest -c; then
+    echo db.h
+else
+    CONFIG="$CONFIG -DUSE_DB185"
+    if dbtest -c; then
+        echo db_185.h
+    else
+        echo no
+        echo 'dbopen() is required' >&2; exit 1
+    fi
+fi
+echo -n 'checking for dbopen() library... '
+
+if dbtest; then
+    echo yes
+else
+    LIBS="$LIBS -ldb"
+    if dbtest; then
+        echo with -ldb
+    else
+        echo no
+        echo 'dbopen() is required' >&2; exit 1
+    fi
+fi
+
+
+uidtest () {
+    conftest "$@" <<'HERE'
+#include <unistd.h>
+int main() {
+    uid_t ruid, euid, suid;
+    gid_t rgid, egid, sgid;
+    getresuid(&ruid, &euid, &suid);
+    getresgid(&rgid, &egid, &sgid);
+    setresuid(ruid, euid, suid);
+    setresgid(rgid, egid, sgid);
+    return 0;
+}
+HERE
+    return $?
+}
+
+echo -n 'checking for setresuid() and friends... '
+if uidtest; then
+    echo yes
+else
+    CONFIG="$CONFIG -D_GNU_SOURCE"
+    if uidtest; then
+        echo with _GNU_SOURCE
+    else
+        echo no
+        echo 'setresuid() and friends are required' >&2; exit 1
+    fi
+fi
+
+
+clocktest () {
+    conftest "$@" <<'HERE'
+#include <time.h>
+int main() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return 0;
+}
+HERE
+    return $?
+}
+
+echo -n 'checking for clock_gettime()... '
+if clocktest; then
+    echo yes
+else
+    LIBS="$LIBS -lrt"
+    if clocktest; then
+        echo with -lrt
+    else
+        echo no
+        echo 'clock_gettime() is required' >&2; exit 1
+    fi
+fi
+
+
+miltertest () {
+    conftest "$@" <<'HERE'
+#include <libmilter/mfapi.h>
+struct smfiDesc milter;
+int main() {
+    smfi_register(milter);
+    smfi_setconn("");
+    smfi_main() != MI_FAILURE;
+    return 0;
+}
+HERE
+    return $?
+}
+
+echo -n 'checking for libmilter... '
+LIBS="$LIBS -lmilter -pthread"
+if miltertest; then
+    echo yes
+else
+    base="$LDFLAGS"
+    while true; do
+        for dir in /usr/lib/libmilter "$PREFIX/lib" "$PREFIX/lib/libmilter"; do
+            LDFLAGS="$base -L$dir"
+            if miltertest; then
+                status=1
+                echo in "$dir"
+                break 2
+            fi
+        done
+        echo no
+        echo 'libmilter is required' >&2; exit 1
+    done
+fi
+
+
+escape () {
+    sed 's/\\/&&/g;s/[/&]/\\&/g' <<HERE
+$1
+HERE
+}
+
+echo 'creating Makefile'
+sed "s/@CC@/$(escape "$CC")/g
+     s/@CFLAGS@/$(escape "$CFLAGS")/g
+     s/@LDFLAGS@/$(escape "$LDFLAGS")/g
+     s/@LIBS@/$(escape "$LIBS")/g
+     s/@PREFIX@/$(escape "$PREFIX")/g
+     s/@CONFIG@/$(escape "$CONFIG")/g" Makefile.in >Makefile
+
+echo "now run 'make'"
+exit 0

@@ -1,0 +1,52 @@
+Version 0.1.2 on 2010-11-05:
+  * Removed the leading "x-" from all verification result codes reported in the
+    "Authentication-Results" header. Since these codes are reported for an
+    experimental method ("x-hashcash"), they cannot conflict with result codes
+    specified for registered methods.
+
+  * Changed the semantics of some verification result codes. A spent stamp is
+    now reported as "fail" rather than "policy" (this behaviour was previously
+    incorrectly shown in the SpamAssassin example). The "fail" result now
+    includes a comment to distinguish spent and invalid stamps. A futuristic
+    stamp is now reported as "policy (futuristic)" rather than "fail". A
+    syntactically-invalid stamp is now reported as "neutral" rather than "fail".
+
+  * Changed how verification result codes are combined across recipients. The
+    "partial" result is now reported with the highest number of bits from all
+    valid stamps instead of the lowest (and the comment includes the word
+    "highest"). The "policy" result for insufficient value also shows the
+    highest number of bits instead of the lowest. The "partial" result is now
+    reported not only if stamps for some recipients are missing, but also if
+    they are affixed but would give "policy" results individually (but not if
+    any would give a "fail" result).
+
+  * Fixed potential buffer overflow while minting. Memory allocated for a minted
+    token was smaller than required by the size of a pointer. If left minting
+    for an improbably long time, the counter at the end of the token could
+    overflow the buffer and overwrite other data or corrupt the heap.
+
+  * Fixed incorrect "fail" verification result with valid stamp for a duplicated
+    envelope recipient when using a double-spend database. The milter mangles
+    verified stamps before recording them in the double-spend database, and
+    previously when it encountered the same envelope recipient twice in a
+    message, it would attempt to verify the now mangled stamp again and consider
+    it invalid.
+
+  * Fixed minting tokens for values that are multiples of 32 bits. Previously
+    when such a value was requested with the '-m' option only stamps with an
+    additional 32 bits of preimage were accepted, making minting impractical.
+
+  * Fixed argument handling in configure script. Previously the configure script
+    entered an infinite loop when given any command-line arguments.
+
+  * Fixed periodic synchronization of double-spend database to disk. Previously
+    the database would only be synchronized a single time during runtime (but
+    also written to disk at normal program exit).
+
+  * Added special handling for "X-Hashcash: skip" header. Previously this header
+    (as any other "X-Hashcash" header) already prevented minting stamps for
+    outgoing messages, now this special case of the header is also removed from
+    the message.
+
+Version 0.1.1 on 2010-03-27:
+    First release.
