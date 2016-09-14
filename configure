@@ -36,12 +36,13 @@ fi
 
 conftest () {
     cat >conftest.c
-    args="$CFLAGS $CONFIG"
+    set -- "$@" -o conftest.out conftest.c
     if [ "$1" != '-c' ]; then
-        args="$args $LDFLAGS $LIBS"
+        set -- "$@" $LDFLAGS $LIBS
     fi
-    "$CC" $args "$@" -Wimplicit -Werror -o conftest.out conftest.c \
-        >/dev/null 2>&1
+    set -- $CFLAGS $CONFIG "$@"
+    set -- -Werror=implicit "$@" # detect required _GNU_SOURCE
+    "$CC" "$@" >/dev/null 2>&1
     status=$?
     rm -f conftest.c conftest.out
     return $status
