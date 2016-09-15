@@ -179,7 +179,7 @@ int match_ipaddr(void* hostaddr, const struct ipaddr* match) {
             if (in6->sin6_addr.s6_addr[i] != (i < 10 ? 0 : 0xff))
                 goto not_v4mapped;
         /* try an IPv4-mapped address as an IPv4 address too */
-        local.s_addr = *(uint32_t*)&in6->sin6_addr.s6_addr[12];
+        memcpy(&local.s_addr, &in6->sin6_addr.s6_addr[12], 4);
         if (match_ipaddr_in(&local, match))
             return 1;
     not_v4mapped:
