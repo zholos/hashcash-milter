@@ -198,7 +198,37 @@ milter and Postfix. See the Postfix documentation on milters at
 <http://www.postfix.org/MILTER_README.html> for details.
 
 
-8. Using with SpamAssassin
+8. Using with Sendmail
+
+[Contributed by Kyle Amon of BackWatcher, Inc. <http://www.backwatcher.ca>]
+
+In a simple configuration with no other milters, adding the following option to
+your 'domain/mydomain.m4' file and regenerating your '.cf' file should be
+sufficient:
+
+    INPUT_MAIL_FILTER(`hashcash-milter',`S=unix:/var/spool/hashcash-milter/sock, T=C:30s;S:2m;R:4m;E:6m')dnl
+
+Having omitted the flags field (F=) means that messages will be accepted if the
+milter fails. Since this milter is not critical, this is the preferred option.
+Otherwise, if the milter failed, mail would be temporarily rejected until it was
+restarted.
+
+The socket path is relative to the root directory. The milter itself will have a
+socket path specified relative to the root as well,
+
+    -p local:/var/spool/hashcash-milter/sock
+
+or relative to its own chroot directory,
+
+    -p local:/sock
+
+The remaining options are various timeouts, all of which are thoroughly
+documented in section 5.11 of the Sendmail Installation and Operation Guide,
+which should be on your system under '/usr/local/share/doc/sendmail/op' or
+someplace similar.
+
+
+9. Using with SpamAssassin
 
 SpamAssassin has its own plugin for verifying Hashcash stamps, but since it
 doesn't have access to the envelope recipients, and the message recipient
@@ -246,7 +276,7 @@ case-sensitive, while the domain name is case-insensitive and will be listed as
 reported by the MTA.
 
 
-9. Updates and feedback
+10. Updates and feedback
 
 This program is hosted at <http://althenia.net/hashcash>.
 The author is Andrey Zholos <aaz@althenia.net>.
