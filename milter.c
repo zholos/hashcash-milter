@@ -1,5 +1,5 @@
 /*
- * Part of Hashcash Milter version 0.1.2 from <http://althenia.net/hashcash>.
+ * Part of Hashcash Milter version 0.1.3 from <http://althenia.net/hashcash>.
  *
  * Copyright 2010 Andrey Zholos.
  *
@@ -1092,7 +1092,7 @@ struct smfiDesc milter = {
 
 
 const char* usage_short =
-"Hashcash Milter 0.1.2\n"
+"Hashcash Milter 0.1.3\n"
 "Usage: hashcash-milter -p socket [-f] [-P pidfile]\n"
 "                      [-u user[:group] [-C rootdir]]\n"
 "                      [-a] [-i addr] [-c bits [-d datafile]]\n"
@@ -1338,7 +1338,7 @@ int main(int argc, char* argv[]) {
         if (!daemonize)
             err(EXIT_FAILURE, "write(%s) failed", pidfile);
 
-    syslog(LOG_INFO, "hashcash-milter 0.1.2 started");
+    syslog(LOG_INFO, "hashcash-milter 0.1.3 started");
     status = smfi_main();
 
     /* clean up */

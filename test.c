@@ -1,5 +1,5 @@
 /*
- * Part of Hashcash Milter version 0.1.2 from <http://althenia.net/hashcash>.
+ * Part of Hashcash Milter version 0.1.3 from <http://althenia.net/hashcash>.
  *
  * Copyright 2010 Andrey Zholos.
  *
