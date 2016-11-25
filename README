@@ -121,7 +121,7 @@ E.g.:
 
     -c 20
 
-In order to get an "pass" result, each of the envelope recipients that is also
+In order to get a "pass" result, each of the envelope recipients that is also
 listed in the "To" or "CC" headers must have a corresponding valid Hashcash
 stamp with at least the value specified in the '-c' option. Recipients at other
 domains will not be listed on the SMTP envelope, so any stamps for them will be
@@ -203,10 +203,11 @@ milter and Postfix. See the Postfix documentation on milters at
 [Contributed by Kyle Amon of BackWatcher, Inc. <http://www.backwatcher.ca>]
 
 In a simple configuration with no other milters, adding the following option to
-your 'domain/mydomain.m4' file and regenerating your '.cf' file should be
+your 'domain/mydomain.m4' file and regenerating your '.cf' files should be
 sufficient:
 
-    INPUT_MAIL_FILTER(`hashcash-milter',`S=unix:/var/spool/hashcash-milter/sock, T=C:30s;S:2m;R:4m;E:6m')dnl
+    INPUT_MAIL_FILTER(`hashcash-milter',
+        `S=unix:/var/spool/hashcash-milter/sock, T=C:30s;S:2m;R:4m;E:6m')dnl
 
 Having omitted the flags field (F=) means that messages will be accepted if the
 milter fails. Since this milter is not critical, this is the preferred option.
