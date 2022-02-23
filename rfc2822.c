@@ -48,6 +48,7 @@ const char* skip_comment(const char* s) {
         case ')':
             if (!--brackets)
                 return s + 1;
+            break;
         case '\\':
             if (s[1])
                 s++;
