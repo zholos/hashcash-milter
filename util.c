@@ -469,10 +469,11 @@ int format_date(time_t base, long delta, char* date, size_t date_len) {
         tt = base + delta;
         if (tt < base)
             tt = base;
-    } else
+    } else {
         tt = base - (-delta);
         if (tt > base)
             tt = base;
+    }
 
     if (gmtime_r(&tt, &tm) == NULL)
         return -1;
